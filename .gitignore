@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual env
+.venv/
+
+# Local auth/user data (do not commit)
+backend/app/password_store.json
+backend/app/auth_secret.txt
+
+# Generated demo outputs
+overlay_png_base64.png
+mask_png_base64.png

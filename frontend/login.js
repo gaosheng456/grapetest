@@ -8,6 +8,15 @@ function apiBase() {
   return $("apiBase").value.trim().replace(/\/$/, "");
 }
 
+function computeDefaultApiBase() {
+  const host = window.location.hostname;
+  const proto = window.location.protocol === "https:" ? "https" : "http";
+  if (!host || host === "127.0.0.1" || host === "localhost") {
+    return "http://127.0.0.1:8000";
+  }
+  return `${proto}://${host}:8000`;
+}
+
 async function postJson(url, body) {
   const resp = await fetch(url, {
     method: "POST",
@@ -77,6 +86,11 @@ if (hasToken()) {
 const prevApi = localStorage.getItem("auth_api_base");
 if (prevApi) {
   $("apiBase").value = prevApi;
+} else {
+  const current = $("apiBase").value.trim();
+  if (!current || current === "http://127.0.0.1:8000") {
+    $("apiBase").value = computeDefaultApiBase();
+  }
 }
 
 $("loginId").value = localStorage.getItem("auth_identifier") || "grape";

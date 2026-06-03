@@ -1,5 +1,14 @@
 const $ = (id) => document.getElementById(id);
 
+function computeDefaultApiBase() {
+  const host = window.location.hostname;
+  const proto = window.location.protocol === "https:" ? "https" : "http";
+  if (!host || host === "127.0.0.1" || host === "localhost") {
+    return "http://127.0.0.1:8000";
+  }
+  return `${proto}://${host}:8000`;
+}
+
 function getAuthToken() {
   return localStorage.getItem("auth_token") || "";
 }
@@ -40,6 +49,11 @@ const state = {
 const savedApiBase = getAuthApiBase();
 if (savedApiBase && $("apiBase")) {
   $("apiBase").value = savedApiBase;
+} else if ($("apiBase")) {
+  const current = $("apiBase").value.trim();
+  if (!current || current === "http://127.0.0.1:8000") {
+    $("apiBase").value = computeDefaultApiBase();
+  }
 }
 
 const CAMERA_INTERVAL_MS = 800;

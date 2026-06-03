@@ -5,6 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>YOLOv11 智能葡萄分割系统</title>
   <link rel="stylesheet" href="./style.css" />
+
+  <script>
+    // 主页面必须先登录：没有 token 直接跳登录页（尽量在页面渲染前完成跳转）
+    (() => {
+      try {
+        const token = localStorage.getItem("auth_token");
+        if (!token) {
+          window.location.replace("./login.html");
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  </script>
 </head>
 <body>
   <main class="page">
