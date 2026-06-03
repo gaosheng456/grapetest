@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YOLOv11 智能葡萄分割系统</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="top-banner">
+      <div class="window-actions">
+        <button id="minimizeBtn" class="window-btn" type="button" title="最小化">−</button>
+        <button id="closeBtn" class="window-btn close" type="button" title="退出">×</button>
+      </div>
+      <h1>YOLOv11 智能葡萄分割系统</h1>
+    </header>
+
+    <div id="minimizedBar" class="minimized-bar hidden">
+      <span>系统已最小化，点击恢复显示</span>
+      <button id="restoreBtn" type="button">恢复</button>
+    </div>
+
+    <section id="mainLayout" class="layout">
+      <aside class="sidebar-card">
+        <div class="panel-title-block">
+          <h2>控制面板</h2>
+          <p>图像导入、参数设置与结果导出</p>
+        </div>
+
+        <div class="group">
+          <div class="group-head">图像导入</div>
+          <div class="upload-card">
+            <input id="file" type="file" accept="image/*" hidden />
+            <input id="folderInput" type="file" accept="image/*" webkitdirectory directory multiple hidden />
+            <div class="upload-actions">
+              <button id="openImageBtn" class="upload-main" type="button">打开图片</button>
+              <button id="openCameraBtn" class="upload-main" type="button">打开摄像头</button>
+            </div>
+            <span class="upload-sub">点击选择葡萄图片</span>
+            <strong id="fileNameHint">未选择文件</strong>
+          </div>
+          <button id="openFolderBtn" class="action-btn light" type="button">打开文件夹</button>
+          <button id="run" class="action-btn primary">开始图像分割</button>
+        </div>
+
+        <div class="group">
+          <div class="group-head">检测参数</div>
+          <label class="field">
+            <span>后端地址</span>
+            <input id="apiBase" class="input" value="http://127.0.0.1:8000" />
+          </label>
+          <div class="mini-grid">
+            <label class="field">
+              <span>置信度</span>
+              <input id="conf" class="input" type="number" min="0" max="1" step="0.01" value="0.60" />
+            </label>
+            <label class="field">
+              <span>交并比</span>
+              <input id="iou" class="input" type="number" min="0" max="1" step="0.01" value="0.30" />
+            </label>
+          </div>
+          <label class="field">
+            <span>语义阈值</span>
+            <input id="threshold" class="input" type="number" min="0" max="1" step="0.01" value="0.60" />
+          </label>
+        </div>
+
+        <div class="group">
+          <div class="group-head">数据统计</div>
+          <div class="stat-box emphasis">
+            <span>检测结果计数</span>
+            <strong id="statCount">0</strong>
+          </div>
+          <div class="stat-box">
+            <span>检测模式</span>
+            <strong id="statMode">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>像素面积</span>
+            <strong id="statPixels">0</strong>
+          </div>
+          <div class="stat-box">
+            <span>覆盖率</span>
+            <strong id="statCoverage">0.00%</strong>
+          </div>
+          <div class="stat-box">
+            <span>推理耗时</span>
+            <strong id="statLatency">-</strong>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-head">操作</div>
+          <div class="side-actions">
+            <button id="reset" class="action-btn light" type="button">清空界面</button>
+          </div>
+          <div class="status-panel">
+            <span class="status-label">当前状态</span>
+            <strong id="status">待检测</strong>
+          </div>
+        </div>
+      </aside>
+
+      <section class="content-column">
+        <section class="content-card">
+          <div class="section-head">
+            <div>
+              <h2>可视化推理视图</h2>
+              <p>左侧显示原始图像，右侧显示葡萄分割叠加结果</p>
+            </div>
+            <div class="view-meta">
+              <span>文件：<strong id="detailFilename">-</strong></span>
+              <span>接口：<strong id="detailApi">http://127.0.0.1:8000</strong></span>
+            </div>
+          </div>
+
+          <div class="visual-grid">
+            <article class="visual-card">
+              <div class="visual-head">原始图像</div>
+              <div class="visual-body">
+                <img id="preview" alt="原始图像" />
+                <video id="camera" class="hidden" playsinline autoplay muted></video>
+                <div id="previewEmpty" class="image-empty">等待上传图片</div>
+              </div>
+            </article>
+
+            <article class="visual-card">
+              <div class="visual-head">图像分割结果</div>
+              <div class="visual-body">
+                <img id="overlay" alt="图像分割结果" />
+                <div id="overlayEmpty" class="image-empty">检测后显示结果</div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="content-card result-card">
+          <div class="section-head compact">
+            <div>
+              <h2>检测结果</h2>
+              <p>对语义分割结果进行统计并输出主要区域信息</p>
+            </div>
+            <div class="result-tags">
+              <span class="tag">当前视图：叠加图</span>
+              <span class="tag" id="detailStatus">待检测</span>
+            </div>
+          </div>
+
+          <div class="table-shell">
+            <table class="result-table">
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>预测类别</th>
+                  <th>像素面积 (px²)</th>
+                  <th>边界框坐标 (xmin, ymin, xmax, ymax)</th>
+                  <th>置信度</th>
+                </tr>
+              </thead>
+              <tbody id="resultTableBody">
+                <tr class="table-empty">
+                  <td colspan="5">暂无检测结果，请先上传图片并执行分割</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre id="json" class="json"></pre>
+          <img id="mask" class="hidden-mask" alt="mask 图" />
+        </section>
+      </section>
+    </section>
+
+    <button id="floatingExitBtn" class="floating-exit" type="button">退出</button>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
