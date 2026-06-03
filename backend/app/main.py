@@ -4,9 +4,11 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import Depends, FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from .auth_routes import require_user, router as auth_router
+from .auth_store import ensure_default_user
 from .inference import OnnxGrapeSegmenter
 from .utils import encode_png_base64, imdecode_image
 
@@ -35,12 +37,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+
 segmenter: Optional[OnnxGrapeSegmenter] = None
 
 
 @app.on_event("startup")
 def _startup() -> None:
     global segmenter
+    ensure_default_user()
     model_path = _resolve_model_path()
     segmenter = OnnxGrapeSegmenter(model_path)
 
@@ -65,10 +70,14 @@ def model_info() -> Dict[str, Any]:
 
 @app.post("/api/predict")
 async def predict(
+    user: str = Depends(require_user),
     file: UploadFile = File(...),
     conf: float = 0.25,
     iou: float = 0.45,
     threshold: float = 0.5,
+    min_area: int = 100000,
+    min_w: int = 40,
+    min_h: int = 40,
 ) -> Dict[str, Any]:
     if segmenter is None:
         raise RuntimeError("模型尚未加载")
@@ -76,7 +85,15 @@ async def predict(
     data = await file.read()
     img_bgr = imdecode_image(data)
 
-    result = segmenter.predict(img_bgr, conf_thres=conf, iou_thres=iou, semantic_threshold=threshold)
+    result = segmenter.predict(
+        img_bgr,
+        conf_thres=conf,
+        iou_thres=iou,
+        semantic_threshold=threshold,
+        min_area=min_area,
+        min_w=min_w,
+        min_h=min_h,
+    )
 
     mask_b64 = encode_png_base64(result["mask_u8"])
     overlay_b64 = encode_png_base64(result["overlay_bgr"])

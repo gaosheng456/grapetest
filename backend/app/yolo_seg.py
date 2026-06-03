@@ -257,3 +257,44 @@ def postprocess_semantic_mask(
     out_orig = cv2.resize(out_unpad, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
     mask = (out_orig >= threshold).astype(np.uint8) * 255
     return mask
+
+
+def postprocess_semantic_prob_and_mask(
+    output: np.ndarray,
+    orig_hw: Tuple[int, int],
+    input_hw: Tuple[int, int],
+    letterbox_res: LetterboxResult,
+    threshold: float = 0.5,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """返回 (prob_map, mask_u8)。
+
+    - prob_map: (H,W) float32，范围约为 [0,1]
+    - mask_u8: (H,W) uint8，0/255
+    """
+    # 复用原逻辑，但保留 out_orig 概率图
+    if output.ndim == 4:
+        out = output[0]
+        if out.shape[0] == 1:
+            out = out[0]
+        else:
+            out = np.argmax(out, axis=0).astype(np.float32)
+    elif output.ndim == 3:
+        out = output[0]
+    else:
+        out = output
+
+    out = out.astype(np.float32)
+    if out.max() > 1.0 or out.min() < 0.0:
+        out = sigmoid(out)
+
+    in_h, in_w = input_hw
+    out_up = cv2.resize(out, (in_w, in_h), interpolation=cv2.INTER_LINEAR)
+
+    pad_x, pad_y = letterbox_res.pad
+    scaled_w, scaled_h = letterbox_res.new_unpad
+    orig_h, orig_w = orig_hw
+
+    out_unpad = out_up[pad_y : pad_y + scaled_h, pad_x : pad_x + scaled_w]
+    out_orig = cv2.resize(out_unpad, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR).astype(np.float32)
+    mask = (out_orig >= threshold).astype(np.uint8) * 255
+    return out_orig, mask

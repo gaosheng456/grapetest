@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 - YOLOv11 智能葡萄分割系统</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="top-banner">
+      <h1>YOLOv11 智能葡萄分割系统</h1>
+    </header>
+
+    <section class="content-card" style="max-width: 520px; margin: 0 auto; padding: 16px;">
+      <div class="panel-title-block" style="padding: 4px 4px 8px;">
+        <h2>登录 / 注册</h2>
+        <p>使用手机号或邮箱注册后登录。默认账号：grape，密码：123</p>
+      </div>
+
+      <div class="group">
+        <div class="group-head">后端地址</div>
+        <label class="field">
+          <span>API Base</span>
+          <input id="apiBase" class="input" value="http://127.0.0.1:8000" />
+        </label>
+      </div>
+
+      <div class="group">
+        <div class="group-head">登录</div>
+        <label class="field">
+          <span>账号（默认可用：grape）</span>
+          <input id="loginId" class="input" autocomplete="username" />
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input id="loginPwd" class="input" type="password" autocomplete="current-password" />
+        </label>
+        <button id="loginBtn" class="action-btn primary" type="button">登录</button>
+      </div>
+
+      <div class="group">
+        <div class="group-head">注册</div>
+        <label class="field">
+          <span>手机号或邮箱</span>
+          <input id="regId" class="input" autocomplete="username" placeholder="例如：13800138000 / user@example.com" />
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input id="regPwd" class="input" type="password" autocomplete="new-password" />
+        </label>
+        <button id="registerBtn" class="action-btn light" type="button">注册</button>
+      </div>
+
+      <div class="group">
+        <div class="status-panel">
+          <span class="status-label">提示</span>
+          <strong id="msg">请先登录</strong>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="./login.js"></script>
+</body>
+</html>

@@ -1,5 +1,31 @@
 const $ = (id) => document.getElementById(id);
 
+function getAuthToken() {
+  return localStorage.getItem("auth_token") || "";
+}
+
+function getAuthApiBase() {
+  return localStorage.getItem("auth_api_base") || "";
+}
+
+function redirectToLogin() {
+  window.location.href = "./login.html";
+}
+
+function ensureLoggedIn() {
+  if (!getAuthToken()) {
+    redirectToLogin();
+    return false;
+  }
+  return true;
+}
+
+// 主页面必须先登录
+if (!ensureLoggedIn()) {
+  // 阻止后续脚本继续执行引发报错
+  throw new Error("NOT_LOGGED_IN");
+}
+
 const state = {
   previewUrl: "",
   overlayUrl: "",
@@ -9,6 +35,12 @@ const state = {
   cameraTimer: null,
   cameraBusy: false,
 };
+
+// 恢复登录时使用的后端地址
+const savedApiBase = getAuthApiBase();
+if (savedApiBase && $("apiBase")) {
+  $("apiBase").value = savedApiBase;
+}
 
 const CAMERA_INTERVAL_MS = 800;
 
@@ -135,9 +167,17 @@ async function predictBlob(blob, filename) {
   const form = new FormData();
   form.append("file", blob, filename);
 
+  const token = getAuthToken();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
   const start = performance.now();
-  const resp = await fetch(url, { method: "POST", body: form });
+  const resp = await fetch(url, { method: "POST", body: form, headers });
   if (!resp.ok) {
+    if (resp.status === 401) {
+      localStorage.removeItem("auth_token");
+      redirectToLogin();
+      throw new Error("未登录");
+    }
     const text = await resp.text();
     throw new Error(`HTTP ${resp.status}: ${text}`);
   }
@@ -185,10 +225,10 @@ async function startCameraRealtime() {
           const coverage = metrics.totalPixels > 0 ? (metrics.foregroundPixels / metrics.totalPixels) * 100 : 0;
 
           // 摄像头模式：与图片模式一致，累积到历史表格并重新编号。
-          appendResultRows(metrics.components, data.detections || []);
+          appendResultRows(data.detections || []);
           renderAccumulatedTable();
 
-          $("statCount").textContent = String(state.resultRows.length);
+          $("statCount").textContent = `${getCurrentGrapeCount(data.detections, metrics.components)}串`;
           $("statMode").textContent = `${data.mode || "semantic"} (camera)`;
           $("statPixels").textContent = String(metrics.foregroundPixels);
           $("statCoverage").textContent = `${coverage.toFixed(2)}%`;
@@ -198,6 +238,7 @@ async function startCameraRealtime() {
             source: "camera",
             mode: data.mode,
             detections: data.detections,
+            current_grape_count: getCurrentGrapeCount(data.detections, metrics.components),
             connected_components: metrics.components,
             foreground_pixels: metrics.foregroundPixels,
             coverage_percent: Number(coverage.toFixed(4)),
@@ -230,6 +271,56 @@ function downloadDataUrl(dataUrl, filename) {
   a.href = dataUrl;
   a.download = filename;
   a.click();
+}
+
+function downloadText(text, filename, mime = "text/plain;charset=utf-8") {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function csvEscape(value) {
+  const s = String(value ?? "");
+  if (/[\r\n\",]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function exportResultsToCsv() {
+  if (!Array.isArray(state.resultRows) || state.resultRows.length === 0) {
+    setStatus("暂无可导出的检测结果");
+    return;
+  }
+
+  const header = ["序号", "预测类别", "像素面积(px^2)", "边界框(xmin,ymin,xmax,ymax)", "置信度"].join(",");
+  const lines = [header];
+
+  state.resultRows.forEach((row, idx) => {
+    const box = Array.isArray(row.box) ? `[${row.box.join(", ")}]` : "";
+    const score = typeof row.score === "number" ? row.score : "";
+    const cols = [
+      idx + 1,
+      "Grape（葡萄）",
+      row.area ?? "",
+      box,
+      score,
+    ].map(csvEscape);
+    lines.push(cols.join(","));
+  });
+
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+  // 加 BOM，便于 Excel 正常识别 UTF-8 中文
+  const csvText = "\ufeff" + lines.join("\r\n");
+  downloadText(csvText, `grape_results_${ts}.csv`, "text/csv;charset=utf-8");
+  setStatus("已导出 CSV");
 }
 
 function computeConnectedComponents(maskImage) {
@@ -303,18 +394,26 @@ function computeConnectedComponents(maskImage) {
   };
 }
 
-function appendResultRows(components, detections) {
+function appendResultRows(detections) {
   const dets = Array.isArray(detections) ? detections : [];
-  const safeComponents = Array.isArray(components) ? components : [];
 
-  safeComponents.forEach((item, idx) => {
-    const score = dets[idx]?.score;
+  dets.forEach((det) => {
+    const box = Array.isArray(det?.box) ? det.box : null;
+    if (!box || box.length !== 4) return;
+
     state.resultRows.push({
-      area: item.area,
-      box: item.box,
-      score: typeof score === "number" ? score : null,
+      area: typeof det?.area === "number" ? det.area : null,
+      box,
+      score: typeof det?.score === "number" ? det.score : null,
     });
   });
+}
+
+function getCurrentGrapeCount(detections, components) {
+  const dets = Array.isArray(detections) ? detections : [];
+  if (dets.length > 0) return dets.length;
+  const comps = Array.isArray(components) ? components : [];
+  return comps.length;
 }
 
 function renderAccumulatedTable() {
@@ -350,7 +449,7 @@ function resetDashboard() {
   $("fileNameHint").textContent = "未选择文件";
   $("detailFilename").textContent = "-";
   $("detailApi").textContent = $("apiBase").value.trim() || "-";
-  $("statCount").textContent = "0";
+  $("statCount").textContent = "0串";
   $("statMode").textContent = "-";
   $("statPixels").textContent = "0";
   $("statCoverage").textContent = "0.00%";
@@ -439,14 +538,22 @@ $("run").addEventListener("click", async () => {
   form.append("file", file);
   const url = `${apiBase}/api/predict?conf=${encodeURIComponent(conf)}&iou=${encodeURIComponent(iou)}&threshold=${encodeURIComponent(threshold)}`;
 
+  const token = getAuthToken();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
   $("run").disabled = true;
   setStatus("检测中...");
   $("detailApi").textContent = apiBase;
 
   const start = performance.now();
   try {
-    const resp = await fetch(url, { method: "POST", body: form });
+    const resp = await fetch(url, { method: "POST", body: form, headers });
     if (!resp.ok) {
+      if (resp.status === 401) {
+        localStorage.removeItem("auth_token");
+        redirectToLogin();
+        throw new Error("未登录");
+      }
       const text = await resp.text();
       throw new Error(`HTTP ${resp.status}: ${text}`);
     }
@@ -467,10 +574,10 @@ $("run").addEventListener("click", async () => {
       const coverage = metrics.totalPixels > 0 ? (metrics.foregroundPixels / metrics.totalPixels) * 100 : 0;
 
       // 累积结果：不覆盖上一轮表格，而是追加并重新按 1..N 编号。
-      appendResultRows(metrics.components, data.detections || []);
+      appendResultRows(data.detections || []);
       renderAccumulatedTable();
 
-      $("statCount").textContent = String(state.resultRows.length);
+      $("statCount").textContent = `${getCurrentGrapeCount(data.detections, metrics.components)}串`;
       $("statMode").textContent = data.mode || "semantic";
       $("statPixels").textContent = String(metrics.foregroundPixels);
       $("statCoverage").textContent = `${coverage.toFixed(2)}%`;
@@ -480,6 +587,7 @@ $("run").addEventListener("click", async () => {
         filename: data.filename,
         mode: data.mode,
         detections: data.detections,
+        current_grape_count: getCurrentGrapeCount(data.detections, metrics.components),
         connected_components: metrics.components,
         foreground_pixels: metrics.foregroundPixels,
         coverage_percent: Number(coverage.toFixed(4)),
@@ -499,6 +607,8 @@ $("run").addEventListener("click", async () => {
 });
 
 $("reset").addEventListener("click", resetDashboard);
+
+$("exportCsv").addEventListener("click", exportResultsToCsv);
 $("minimizeBtn").addEventListener("click", minimizeUI);
 $("restoreBtn").addEventListener("click", restoreUI);
 $("closeBtn").addEventListener("click", pickBestEffortClose);
